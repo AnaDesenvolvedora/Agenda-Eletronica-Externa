@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Agenda Eletrônica PRO | Agende seu horário</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #f0f4f8; }
+        
+        .app-header { background: white; padding: 16px 24px; border-radius: 16px; margin: 20px 20px 0 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .app-header h2 { font-size: 1.3rem; font-weight: 700; background: linear-gradient(135deg, #4f46e5, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        .filtros {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .filtros select {
+            padding: 10px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            min-width: 180px;
+            background: white;
+        }
+        .btn-filtrar {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-filtrar:hover { background: #4338ca; }
+        
+        .loading { text-align: center; padding: 60px; background: white; border-radius: 16px; }
+        .spinner { width: 50px; height: 50px; border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .mes-nav {
+            background: white;
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .mes-nav button {
+            background: #f1f5f9;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .mes-nav button:hover { background: #4f46e5; color: white; }
+        .mes-nav h3 { font-size: 1.2rem; font-weight: 700; }
+        
+        /* CORRIGIDO: Calendário com cabeçalho Domingo a Sábado */
+        .calendario-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        .cal-dia-semana {
+            text-align: center;
+            padding: 12px 4px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+        .cal-dia {
+            background: white;
+            border-radius: 12px;
+            padding: 10px;
+            min-height: 100px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .cal-dia:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .cal-dia-num { font-weight: 700; font-size: 0.9rem; margin-bottom: 6px; }
+        .cal-dia-vazio { background: #f8fafc; border-radius: 12px; min-height: 100px; opacity: 0.5; }
+        
+        .slot-item { display: flex; align-items: center; gap: 4px; font-size: 0.68rem; margin: 2px 0; padding: 2px 5px; border-radius: 4px; background: #ecfdf5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .slot-livre { color: #065f46; }
+        .slot-livre-bolinha { width: 7px; height: 7px; background: #10b981; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 24px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 28px;
+            animation: modalFade 0.3s ease;
+        }
+        @keyframes modalFade {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 0.7rem; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; color: #64748b; }
+        .form-group input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 0.9rem; }
+        .btn-confirmar { background: #4f46e5; color: white; border: none; padding: 12px; border-radius: 12px; font-weight: 600; cursor: pointer; width: 100%; }
+        .btn-confirmar:hover { background: #4338ca; }
+        .btn-cancelar { background: #f1f5f9; color: #334155; border: none; padding: 10px; border-radius: 12px; cursor: pointer; width: 100%; margin-top: 12px; }
+        .btn-cancelar:hover { background: #e2e8f0; }
+        
+        .info-servico {
+            background: #f8fafc;
+            padding: 14px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            border-left: 3px solid #4f46e5;
+        }
+        .info-servico p { margin: 5px 0; font-size: 0.82rem; }
+        
+        .lista-horarios { max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+        .horario-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .horario-card:hover { border-color: #4f46e5; background: #f8fafc; transform: translateX(4px); }
+        .horario-card.selecionado { border-color: #4f46e5; background: #eef2ff; border-width: 2px; }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1001;
+            border-left: 4px solid #10b981;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        
+        .sem-horarios { text-align: center; padding: 20px; color: #94a3b8; }
+        
+        @media (max-width: 768px) {
+            .calendario-grid { gap: 4px; }
+            .cal-dia { padding: 6px; min-height: 75px; }
+            .cal-dia-num { font-size: 0.8rem; margin-bottom: 3px; }
+            .cal-dia-semana { font-size: 0.65rem; padding: 8px 2px; }
+            .slot-item { font-size: 0.6rem; }
+            .filtros { flex-direction: column; align-items: stretch; }
+            .filtros select { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-header">
+    <h2>📅 Agenda Eletrônica PRO</h2>
+    <div><i class="fas fa-calendar-alt" style="color: #4f46e5;"></i> Agende seu horário</div>
+</div>
+
+<div class="container">
+    <div class="filtros">
+        <select id="filtroPrestador">
+            <option value="">Todos os prestadores</option>
+        </select>
+        <select id="filtroServico">
+            <option value="">Todos os serviços</option>
+        </select>
+        <button class="btn-filtrar" onclick="aplicarFiltros()"><i class="fas fa-search"></i> Filtrar</button>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Carregando horários disponíveis...</p>
+    </div>
+
+    <div id="calendarioArea" style="display: none;">
+        <div class="mes-nav">
+            <button onclick="mudarMes(-1)"><i class="fas fa-chevron-left"></i> Mês anterior</button>
+            <h3 id="mesAtual"></h3>
+            <button onclick="mudarMes(1)">Próximo mês <i class="fas fa-chevron-right"></i></button>
+        </div>
+        <div id="calendarioGrid" class="calendario-grid"></div>
+    </div>
+</div>
+
+<div id="modalAgendamento" class="modal">
+    <div class="modal-content">
+        <h3><i class="fas fa-calendar-check"></i> Preencha seus dados</h3>
+        <div id="modalBody"></div>
+        <button class="btn-cancelar" onclick="fecharModal()">Cancelar</button>
+    </div>
+</div>
+
+<script>
+// ============================================
+// SUPABASE - CONEXÃO
+// ============================================
+var supabase = window.supabase.createClient(
+    'https://tvhpqfysvunmppddupum.supabase.co',
+    'sb_publishable_fA1a63dl0MoJ8zjZiBJprw_4syerDaL'
+);
+
+// ============================================
+// VARIÁVEIS
+// ============================================
+var prestadores = [];
+var servicos = [];
+var horarios = [];
+var agendamentos = [];
+
+var mesAtualNum = new Date().getMonth();
+var anoAtual = new Date().getFullYear();
+
+var filtroPrestadorId = null;
+var filtroServicoId = null;
+
+var horarioSelecionado = null;
+
+var ADMIN_ID = 1;
+
+// ============================================
+// FUNÇÕES
+// ============================================
+function showToast(msg, isError) {
+    var toast = document.createElement('div');
+    toast.className = 'toast';
+    if (isError) {
+        toast.style.borderLeftColor = '#ef4444';
+        toast.innerHTML = '<i class="fas fa-exclamation-circle" style="color:#ef4444"></i> ' + msg;
+    } else {
+        toast.innerHTML = '<i class="fas fa-check-circle" style="color:#10b981"></i> ' + msg;
+    }
+    document.body.appendChild(toast);
+    setTimeout(function() { toast.remove(); }, 3500);
+}
+
+function formatarData(dataStr) {
+    if (!dataStr) return '—';
+    var partes = dataStr.split('-');
+    if (partes.length === 3) {
+        return partes[2] + '/' + partes[1] + '/' + partes[0];
+    }
+    var data = new Date(dataStr);
+    if (isNaN(data.getTime())) return '—';
+    return data.toLocaleDateString('pt-BR');
+}
+
+function formatarHora(dataStr) {
+    if (!dataStr) return '—';
+    var data = new Date(dataStr);
+    if (isNaN(data.getTime())) return '—';
+    return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ============================================
+// CARREGAR DADOS
+// ============================================
+async function carregarDados() {
+    var loadingDiv = document.getElementById('loading');
+    var calendarioDiv = document.getElementById('calendarioArea');
+    
+    try {
+        console.log('🔄 Buscando dados do Supabase...');
+        
+        var [p, s, h, a] = await Promise.all([
+            supabase.from('prestadores').select('*').eq('admin_id', ADMIN_ID),
+            supabase.from('servicos').select('*').eq('admin_id', ADMIN_ID),
+            supabase.from('horarios').select('*').eq('admin_id', ADMIN_ID),
+            supabase.from('agendamentos').select('*').eq('admin_id', ADMIN_ID)
+        ]);
+        
+        prestadores = p.data || [];
+        servicos = s.data || [];
+        horarios = h.data || [];
+        agendamentos = a.data || [];
+        
+        console.log('📊 Prestadores:', prestadores.length);
+        console.log('📊 Serviços:', servicos.length);
+        console.log('📊 Horários:', horarios.length);
+        console.log('📊 Agendamentos:', agendamentos.length);
+        
+        // Popular selects
+        var prestSelect = document.getElementById('filtroPrestador');
+        prestSelect.innerHTML = '<option value="">Todos os prestadores</option>';
+        for (var i = 0; i < prestadores.length; i++) {
+            prestSelect.innerHTML += '<option value="' + prestadores[i].id + '">' + prestadores[i].nome + '</option>';
+        }
+        
+        var servSelect = document.getElementById('filtroServico');
+        servSelect.innerHTML = '<option value="">Todos os serviços</option>';
+        for (var i = 0; i < servicos.length; i++) {
+            servSelect.innerHTML += '<option value="' + servicos[i].id + '">' + servicos[i].nome + ' - R$ ' + (servicos[i].valor || 0).toFixed(2) + '</option>';
+        }
+        
+        if (horarios.length === 0) {
+            loadingDiv.innerHTML = '<div class="loading"><p style="color:#64748b;">📭 Nenhum horário disponível no momento.<br>O administrador precisa criar horários primeiro.</p></div>';
+            return;
+        }
+        
+        loadingDiv.style.display = 'none';
+        calendarioDiv.style.display = 'block';
+        
+        carregarCalendario();
+    } catch(e) {
+        console.error('❌ Erro ao carregar:', e);
+        loadingDiv.innerHTML = '<div class="loading"><p style="color: #ef4444;">❌ Erro ao carregar dados. Verifique sua conexão.</p></div>';
+    }
+}
+
+// ============================================
+// CALENDÁRIO - CORRIGIDO (Domingo a Sábado)
+// ============================================
+function carregarCalendario() {
+    var primeiroDia = new Date(anoAtual, mesAtualNum, 1);
+    var ultimoDia = new Date(anoAtual, mesAtualNum + 1, 0);
+    var startOffset = primeiroDia.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+    var diasNoMes = ultimoDia.getDate();
+    
+    // CORRIGIDO: Cabeçalho começa com Domingo
+    var diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    var html = '';
+    
+    // Cabeçalho dos dias da semana
+    for (var i = 0; i < 7; i++) {
+        html += '<div class="cal-dia-semana">' + diasSemana[i] + '</div>';
+    }
+    
+    // Dias vazios antes do primeiro dia do mês
+    for (var i = 0; i < startOffset; i++) {
+        html += '<div class="cal-dia-vazio"></div>';
+    }
+    
+    // Dias do mês
+    for (var d = 1; d <= diasNoMes; d++) {
+        var dataStr = anoAtual + '-' + String(mesAtualNum + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        
+        // Buscar horários disponíveis para esta data
+        var horariosDia = [];
+        for (var i = 0; i < horarios.length; i++) {
+            var h = horarios[i];
+            if (!h.data_hora) continue;
+            if (h.status !== 'livre') continue;
+            
+            var dataHorario = h.data_hora.split('T')[0];
+            if (dataHorario !== dataStr) continue;
+            
+            // Filtrar por prestador
+            if (filtroPrestadorId && h.prestador_id !== filtroPrestadorId) continue;
+            
+            // Filtrar por serviço
+            if (filtroServicoId && h.servico_id !== filtroServicoId) continue;
+            
+            // Verificar se já foi agendado
+            var jaAgendado = false;
+            for (var j = 0; j < agendamentos.length; j++) {
+                if (agendamentos[j].horario_id === h.id) {
+                    jaAgendado = true;
+                    break;
+                }
+            }
+            if (!jaAgendado) {
+                horariosDia.push(h);
+            }
+        }
+        
+        // Ordenar por hora
+        horariosDia.sort(function(a, b) {
+            return new Date(a.data_hora) - new Date(b.data_hora);
+        });
+        
+        html += '<div class="cal-dia" onclick="selecionarDia(\'' + dataStr + '\')">';
+        html += '<div class="cal-dia-num">' + d + '</div>';
+        
+        if (horariosDia.length > 0) {
+            // Mostrar até 3 horários
+            for (var i = 0; i < Math.min(horariosDia.length, 3); i++) {
+                var h = horariosDia[i];
+                var hora = formatarHora(h.data_hora);
+                // Pegar nome do prestador
+                var nomePrest = '';
+                for (var p = 0; p < prestadores.length; p++) {
+                    if (prestadores[p].id === h.prestador_id) {
+                        nomePrest = prestadores[p].nome.split(' ')[0]; // Só primeiro nome
+                        break;
+                    }
+                }
+                html += '<div class="slot-item slot-livre">';
+                html += '<span class="slot-livre-bolinha"></span>';
+                html += '<span>' + hora + (nomePrest ? ' - ' + nomePrest : '') + '</span>';
+                html += '</div>';
+            }
+            if (horariosDia.length > 3) {
+                html += '<div style="font-size:0.6rem; color:#64748b; margin-top:3px; padding-left:2px;">+' + (horariosDia.length - 3) + ' horários</div>';
+            }
+        } else {
+            html += '<div style="font-size:0.6rem; color:#94a3b8; margin-top:4px; text-align:center;">—</div>';
+        }
+        
+        html += '</div>';
+    }
+    
+    // Preencher células vazias no final para completar a grade
+    var totalCelulas = startOffset + diasNoMes;
+    var resto = totalCelulas % 7;
+    if (resto !== 0) {
+        for (var i = 0; i < 7 - resto; i++) {
+            html += '<div class="cal-dia-vazio"></div>';
+        }
+    }
+    
+    document.getElementById('calendarioGrid').innerHTML = html;
+    
+    var meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    document.getElementById('mesAtual').innerHTML = meses[mesAtualNum] + ' ' + anoAtual;
+}
+
+function mudarMes(delta) {
+    mesAtualNum += delta;
+    if (mesAtualNum < 0) {
+        mesAtualNum = 11;
+        anoAtual--;
+    } else if (mesAtualNum > 11) {
+        mesAtualNum = 0;
+        anoAtual++;
+    }
+    carregarCalendario();
+}
+
+function aplicarFiltros() {
+    filtroPrestadorId = document.getElementById('filtroPrestador').value ? parseInt(document.getElementById('filtroPrestador').value) : null;
+    filtroServicoId = document.getElementById('filtroServico').value ? parseInt(document.getElementById('filtroServico').value) : null;
+    carregarCalendario();
+}
+
+// ============================================
+// SELECIONAR DIA E HORÁRIO
+// ============================================
+function selecionarDia(dataStr) {
+    var horariosDia = [];
+    for (var i = 0; i < horarios.length; i++) {
+        var h = horarios[i];
+        if (!h.data_hora) continue;
+        if (h.status !== 'livre') continue;
+        
+        var dataHorario = h.data_hora.split('T')[0];
+        if (dataHorario !== dataStr) continue;
+        
+        if (filtroPrestadorId && h.prestador_id !== filtroPrestadorId) continue;
+        if (filtroServicoId && h.servico_id !== filtroServicoId) continue;
+        
+        var jaAgendado = false;
+        for (var j = 0; j < agendamentos.length; j++) {
+            if (agendamentos[j].horario_id === h.id) {
+                jaAgendado = true;
+                break;
+            }
+        }
+        if (!jaAgendado) {
+            horariosDia.push(h);
+        }
+    }
+    
+    if (horariosDia.length === 0) {
+        showToast('📭 Nenhum horário disponível para esta data', true);
+        return;
+    }
+    
+    horariosDia.sort(function(a, b) {
+        return new Date(a.data_hora) - new Date(b.data_hora);
+    });
+    
+    var modal = document.getElementById('modalAgendamento');
+    var modalBody = document.getElementById('modalBody');
+    
+    var horariosHtml = '<div class="info-servico"><p><strong><i class="fas fa-calendar"></i> Data selecionada:</strong> ' + formatarData(dataStr) + '</p><p style="font-size:0.75rem; color:#64748b;">Escolha um horário abaixo:</p></div>';
+    horariosHtml += '<div class="lista-horarios">';
+    
+    for (var i = 0; i < horariosDia.length; i++) {
+        var h = horariosDia[i];
+        var hora = formatarHora(h.data_hora);
+        var prest = null;
+        for (var p = 0; p < prestadores.length; p++) {
+            if (prestadores[p].id === h.prestador_id) {
+                prest = prestadores[p];
+                break;
+            }
+        }
+        var serv = null;
+        for (var s = 0; s < servicos.length; s++) {
+            if (servicos[s].id === h.servico_id) {
+                serv = servicos[s];
+                break;
+            }
+        }
+        var valorSinal = serv ? (serv.valor * ((serv.sinal_percentual || 30) / 100)) : 0;
+        
+        horariosHtml += '<div class="horario-card" onclick="selecionarHorario(' + h.id + ', \'' + hora + '\', ' + h.prestador_id + ', ' + h.servico_id + ', \'' + dataStr + '\', \'' + h.data_hora + '\')">';
+        horariosHtml += '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">';
+        horariosHtml += '<div><strong><i class="far fa-clock"></i> ' + hora + '</strong></div>';
+        horariosHtml += '<div><span style="background: #d1fae5; color: #065f46; padding: 4px 12px; border-radius: 20px; font-size: 0.7rem;">Disponível</span></div>';
+        horariosHtml += '</div>';
+        horariosHtml += '<div style="margin-top: 8px;">';
+        horariosHtml += '<p><i class="fas fa-user"></i> <strong>Profissional:</strong> ' + (prest ? prest.nome : '—') + '</p>';
+        horariosHtml += '<p><i class="fas fa-cut"></i> <strong>Serviço:</strong> ' + (serv ? serv.nome : '—') + '</p>';
+        horariosHtml += '<p><i class="fas fa-dollar-sign"></i> <strong>Valor:</strong> R$ ' + (serv ? serv.valor.toFixed(2) : '0') + ' | Sinal: R$ ' + valorSinal.toFixed(2) + '</p>';
+        horariosHtml += '</div>';
+        horariosHtml += '</div>';
+    }
+    
+    horariosHtml += '</div>';
+    modalBody.innerHTML = horariosHtml;
+    modal.style.display = 'flex';
+}
+
+function selecionarHorario(horarioId, hora, prestadorId, servicoId, data, dataHoraCompleta) {
+    horarioSelecionado = { 
+        id: horarioId, 
+        hora: hora, 
+        prestadorId: prestadorId, 
+        servicoId: servicoId, 
+        data: data,
+        dataHoraCompleta: dataHoraCompleta
+    };
+    
+    var prest = null;
+    for (var p = 0; p < prestadores.length; p++) {
+        if (prestadores[p].id === prestadorId) {
+            prest = prestadores[p];
+            break;
+        }
+    }
+    var serv = null;
+    for (var s = 0; s < servicos.length; s++) {
+        if (servicos[s].id === servicoId) {
+            serv = servicos[s];
+            break;
+        }
+    }
+    var valorSinal = serv ? (serv.valor * ((serv.sinal_percentual || 30) / 100)) : 0;
+    
+    var modalBody = document.getElementById('modalBody');
+    
+    modalBody.innerHTML = `
+        <div class="info-servico">
+            <p><strong><i class="fas fa-calendar"></i> Data:</strong> ${formatarData(data)}</p>
+            <p><strong><i class="fas fa-clock"></i> Horário:</strong> ${hora}</p>
+            <p><strong><i class="fas fa-user"></i> Profissional:</strong> ${prest ? prest.nome : '—'}</p>
+            <p><strong><i class="fas fa-cut"></i> Serviço:</strong> ${serv ? serv.nome : '—'}</p>
+            <p><strong><i class="fas fa-dollar-sign"></i> Valor total:</strong> R$ ${serv ? serv.valor.toFixed(2) : '0'}</p>
+            <p><strong><i class="fas fa-percent"></i> Sinal (${serv ? serv.sinal_percentual || 30 : 30}%):</strong> R$ ${valorSinal.toFixed(2)}</p>
+        </div>
+        <div class="form-group">
+            <label>SEU NOME COMPLETO *</label>
+            <input type="text" id="clienteNome" placeholder="Digite seu nome completo">
+        </div>
+        <div class="form-group">
+            <label>WHATSAPP (com DDD) *</label>
+            <input type="text" id="clienteWhats" placeholder="(11) 99999-9999">
+        </div>
+        <button class="btn-confirmar" onclick="confirmarAgendamento()">✅ Confirmar Agendamento</button>
+    `;
+    
+    // Destacar o card selecionado
+    var cards = document.querySelectorAll('.horario-card');
+    for (var i = 0; i < cards.length; i++) {
+        cards[i].classList.remove('selecionado');
+    }
+    // Encontrar o card clicado
+    var todosCards = document.querySelectorAll('.horario-card');
+    for (var i = 0; i < todosCards.length; i++) {
+        if (todosCards[i].getAttribute('onclick') && todosCards[i].getAttribute('onclick').indexOf('' + horarioId + '') > -1) {
+            todosCards[i].classList.add('selecionado');
+            break;
+        }
+    }
+}
+
+function fecharModal() {
+    document.getElementById('modalAgendamento').style.display = 'none';
+    horarioSelecionado = null;
+}
+
+// ============================================
+// CONFIRMAR AGENDAMENTO
+// ============================================
+async function confirmarAgendamento() {
+    var clienteNome = document.getElementById('clienteNome').value.trim();
+    var clienteWhats = document.getElementById('clienteWhats').value.trim();
+    
+    if (!clienteNome) {
+        showToast('❌ Por favor, digite seu nome!', true);
+        return;
+    }
+    if (!clienteWhats) {
+        showToast('❌ Por favor, digite seu WhatsApp!', true);
+        return;
+    }
+    // Validar mínimo de dígitos
+    var whatsLimpo = clienteWhats.replace(/\D/g,'');
+    if (whatsLimpo.length < 10) {
+        showToast('❌ WhatsApp inválido! Digite com DDD.', true);
+        return;
+    }
+    
+    if (!horarioSelecionado) return;
+    
+    var serv = null;
+    for (var s = 0; s < servicos.length; s++) {
+        if (servicos[s].id === horarioSelecionado.servicoId) {
+            serv = servicos[s];
+            break;
+        }
+    }
+    var prest = null;
+    for (var p = 0; p < prestadores.length; p++) {
+        if (prestadores[p].id === horarioSelecionado.prestadorId) {
+            prest = prestadores[p];
+            break;
+        }
+    }
+    
+    try {
+        var { error } = await supabase.from('agendamentos').insert([{
+            admin_id: ADMIN_ID,
+            cliente_nome: clienteNome,
+            cliente_whatsapp: clienteWhats,
+            prestador_id: horarioSelecionado.prestadorId,
+            servico_id: horarioSelecionado.servicoId,
+            data_agendamento: horarioSelecionado.dataHoraCompleta,
+            valor_total: serv ? serv.valor : 0,
+            sinal_percentual: serv ? serv.sinal_percentual || 30 : 30,
+            sinal_valor: serv ? serv.valor * ((serv.sinal_percentual || 30) / 100) : 0,
+            status: 'pendente',
+            horario_id: horarioSelecionado.id
+        }]);
+        
+        if (error) {
+            showToast('❌ Erro ao agendar: ' + error.message, true);
+            return;
+        }
+        
+        // Atualizar status do horário
+        await supabase.from('horarios').update({ status: 'ocupado' }).eq('id', horarioSelecionado.id);
+        
+        // WhatsApp para o PRESTADOR (se tiver número)
+        if (prest && prest.whatsapp) {
+            var msgPrestador = encodeURIComponent(
+                '🆕 *NOVO AGENDAMENTO!*\n\n' +
+                '👤 Cliente: ' + clienteNome + '\n' +
+                '📅 Data: ' + formatarData(horarioSelecionado.data) + '\n' +
+                '⏰ Horário: ' + horarioSelecionado.hora + '\n' +
+                '✂️ Serviço: ' + (serv ? serv.nome : '—') + '\n' +
+                '💰 Valor: R$ ' + (serv ? serv.valor.toFixed(2) : '0') + '\n' +
+                '📞 Cliente: ' + clienteWhats
+            );
+            window.open('https://wa.me/55' + prest.whatsapp.replace(/\D/g,'') + '?text=' + msgPrestador, '_blank');
+        }
+        
+        // WhatsApp para o CLIENTE
+        var msgCliente = encodeURIComponent(
+            '✅ *AGENDAMENTO CONFIRMADO!*\n\n' +
+            '📅 Data: ' + formatarData(horarioSelecionado.data) + '\n' +
+            '⏰ Horário: ' + horarioSelecionado.hora + '\n' +
+            '✂️ Serviço: ' + (serv ? serv.nome : '—') + '\n' +
+            '👨‍💼 Profissional: ' + (prest ? prest.nome : '—') + '\n' +
+            '💰 Valor: R$ ' + (serv ? serv.valor.toFixed(2) : '0') + '\n\n' +
+            '🔔 *Chegue 20 minutos antes!*'
+        );
+        window.open('https://wa.me/55' + whatsLimpo + '?text=' + msgCliente, '_blank');
+        
+        fecharModal();
+        showToast('✅ Agendamento realizado com sucesso! Verifique seu WhatsApp.');
+        
+        // Recarregar dados e calendário
+        await carregarDados();
+    } catch(e) {
+        console.error('Erro:', e);
+        showToast('❌ Erro ao processar agendamento.', true);
+    }
+}
+
+// Inicializar
+carregarDados();
+console.log('✅ Agenda Eletrônica PRO (Cliente) carregada!');
+console.log('📅 Calendário: Domingo a Sábado (corrigido)');
+</script>
+</body>
+</html>
